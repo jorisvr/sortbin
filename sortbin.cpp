@@ -8,6 +8,8 @@
  * The program sorts these records in lexicographic order.
  *
  * This program is optimized for short records, e.g. up to 20 bytes.
+ *
+ * Written by Joris van Rantwijk in 2022.
  */
 
 
@@ -1693,12 +1695,14 @@ void usage()
 {
     fprintf(stderr,
         "\n"
+        "Sort fixed-length binary records.\n"
+        "\n"
         "Usage: sortbin [options] inputfile outputfile\n"
         "\n"
         "Options:\n"
         "\n"
         "  -s, --size=N    specify record size of N bytes (required)\n"
-        "  -u, --unique    eleminate duplicates after sorting\n"
+        "  -u, --unique    eliminate duplicates after sorting\n"
         "  --memory=M      use at most M MByte RAM (default: %d)\n"
         "  --branch=B      merge at most B arrays in one step (default: %d)\n"
         "  --temporary-directory=DIR  write temporary file to the specified\n"

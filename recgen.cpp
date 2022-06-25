@@ -21,7 +21,7 @@
 
 
 #define MAX_RECORD_SIZE             65536
-#define REPORT_INTERVAL             100000
+#define REPORT_INTERVAL             1000000
 
 
 namespace {  // anonymous namespace
@@ -215,7 +215,7 @@ void usage()
         "\n"
         "Generate fixed-length random binary records.\n"
         "\n"
-        "Usage: recgen [-a] [-d D] -n N -s S outputfile\n"
+        "Usage: recgen [-a] [-d D] [-S R] -n N -s S outputfile\n"
         "\n"
         "Options:\n"
         "\n"
@@ -223,6 +223,7 @@ void usage()
         "  -d D        specify fraction of duplicate records (0.0 to 1.0)\n"
         "  -n N        specify number of records (required)\n"
         "  -s S        specify record size in bytes (required)\n"
+        "  -S R        specify seed for random generator (default 1)\n"
         "\n");
 }
 
@@ -236,10 +237,10 @@ int main(int argc, char **argv)
     unsigned long long num_records = 0;
     unsigned long record_size = 0;
     bool flag_ascii = false;
-    uint64_t seed = 1;
+    unsigned long long seed = 1;
     int opt;
 
-    while ((opt = getopt(argc, argv, "ad:n:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "ad:n:s:S:")) != -1) {
         char *endptr;
         switch (opt) {
             case 'a':
@@ -275,6 +276,16 @@ int main(int argc, char **argv)
                         || record_size > MAX_RECORD_SIZE) {
                     fprintf(stderr,
                         "ERROR: Invalid record size\n");
+                    return EXIT_FAILURE;
+                }
+                break;
+            case 'S':
+                seed = strtoull(optarg, &endptr, 10);
+                if (endptr == optarg
+                        || *endptr != '\0'
+                        || seed > UINT64_MAX) {
+                    fprintf(stderr,
+                        "ERROR: Invalid random seed\n");
                     return EXIT_FAILURE;
                 }
                 break;

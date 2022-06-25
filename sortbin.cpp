@@ -13,28 +13,6 @@
  */
 
 
-/*
- * TESTING in-memory sort:
- *
- * Input: 10**8 records of 10 bytes
- * Storage: SSD
- *
- * GNU sort:              101.7 seconds
- * GNU sort -S 2G:        110.2 seconds
- * sortbin, qsort_r():    31.1, 31.2, 31.1 seconds  (correct output)
- * sortbin, heapsort:     57.4, 57.1, 58.5 seconds  (correct output)
- * sortbin, quicksort:    24.5, 24.4, 24.4 seconds  (correct output)
- * sortbin, quicksort, depth_limit=8:  31.6 seconds  (correct output)
- *
- *
- * Input: 10**8 records of 10 bytes, 70502908 unique records
- *
- * GNU sort -u:           120.2 seconds
- * sortbin -u:             26.2 seconds  (correct output)
- *
- */
-
-
 // (already defined by g++)  #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 
@@ -61,8 +39,12 @@
 #include <vector>
 
 
-// TODO : use a background thread for file I/O
-// TODO : use fadvise to drop used data from system cache
+// TODO : Reconsider the choice of having a single temporary file;
+//        It appears this causes unnecessary I/O while processing
+//        and unbalanced merge tree.
+// TOOD : Implement multi-threaded sorting
+// TODO : Implement background thread for file I/O
+// TODO : Try fadvise to drop used data from system cache
 
 
 /* Maximum amount of RAM to use (in MBytes). */
@@ -1477,7 +1459,7 @@ void merge_pass(
         // Determine how many blocks will be merged in this group.
         unsigned int this_branch_factor = branch_factor;
         if (branch_factor > num_blocks - block_index) {
-            branch_factor = num_blocks - block_index;
+            this_branch_factor = num_blocks - block_index;
         }
 
         // Skip to the next section of each active input stream.

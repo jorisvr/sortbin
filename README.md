@@ -6,7 +6,7 @@ It is similar to the Unix `sort` utility.
 But where `sort` works with lines of text, SortBin works with fixed-length binary data records.
 
 SortBin reads input from a file, sorts it, and writes the sorted data to an output file.
-These files contain flat, raw arrays of fixed-length binary data records.
+These files contain flat, raw arrays of binary data records.
 
 Records are interpreted as fixed-length strings of 8-bit unsigned integers.
 These records are sorted in lexicographic order.
@@ -27,7 +27,7 @@ SortBin has only been tested on Linux.
 To use SortBin, you must compile the source code.
 Clone the repository, then build as follows:
 ```
-git clone https://github.com/jorisvr/...
+git clone https://github.com/jorisvr/sortbin.git
 cd sortbin
 make
 ```

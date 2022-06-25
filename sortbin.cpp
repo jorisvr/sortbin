@@ -1606,6 +1606,8 @@ void sortbin(
     const std::string& output_name,
     const SortContext& ctx)
 {
+    log(ctx, "using memory_size = %" PRIu64 " bytes\n", ctx.memory_size);
+
     // We want file I/O to occur on 4096-byte boundaries.
     // To ensure this, we want to do I/O on multiples of 4096 records.
     // To ensure this is possible, we need room for ~ 32k records per branch.
@@ -1717,6 +1719,48 @@ std::string get_default_tmpdir(void)
 }
 
 
+/**
+ * Parse a memory size specification.
+ *
+ * Memory size must be specified as an integer with suffix "M" or "G".
+ *
+ * @return specfified memory size in bytes, or 0 for an invalid size
+ */
+uint64_t parse_memory_size(const char *argstr)
+{
+    char *endptr;
+    errno = 0;
+
+    long long value = strtoll(argstr, &endptr, 10);
+    if (endptr == argstr
+            || (endptr[0] != 'G' && endptr[0] != 'M') || endptr[1] != '\0') {
+        fprintf(stderr,
+                "ERROR: Invalid memory size."
+                " Specify e.g. '--memory=800M' or '--memory=4G'.\n");
+        return 0;
+    }
+
+    if (value <= 0 || errno != 0) {
+        fprintf(stderr, "ERROR: Invalid memory size\n");
+        return 0;
+    }
+
+    uint64_t factor;
+    if (endptr[0] == 'G') {
+        factor = 1024 * 1024 * 1024;
+    } else {
+        factor = 1024 * 1024;
+    }
+
+    if ((unsigned long long)value > UINT64_MAX / factor) {
+        fprintf(stderr, "ERROR: Invalid memory size\n");
+        return 0;
+    }
+
+    return value * factor;
+}
+
+
 void usage()
 {
     fprintf(stderr,
@@ -1729,7 +1773,8 @@ void usage()
         "\n"
         "  -s, --size=N    specify record size of N bytes (required)\n"
         "  -u, --unique    eliminate duplicates after sorting\n"
-        "  --memory=M      use at most M MByte RAM (default: %d)\n"
+        "  --memory=<n>M   use at most <n> MiByte RAM (default: %d)\n"
+        "  --memory=<n>G   use at most <n> GiByte RAM\n"
         "  --branch=B      merge at most B arrays in one step (default: %d)\n"
         "  --temporary-directory=DIR  write temporary file to the specified\n"
         "                             directory (default: $TMPDIR)\n"
@@ -1761,7 +1806,7 @@ int main(int argc, char **argv)
     bool flag_unique = false;
     bool flag_verbose = false;
     int record_size = 0;
-    int memory_size = DEFAULT_MEMORY_SIZE_MBYTE;
+    uint64_t memory_size = uint64_t(DEFAULT_MEMORY_SIZE_MBYTE) * 1024 * 1024;
     int branch_factor = DEFAULT_BRANCH_FACTOR;
     std::string tempdir = get_default_tmpdir();
     int opt;
@@ -1780,9 +1825,8 @@ int main(int argc, char **argv)
                 flag_unique = true;
                 break;
             case 'M':
-                memory_size = atoi(optarg);
-                if (memory_size <= 0) {
-                    fprintf(stderr, "ERROR: Invalid memory size\n");
+                memory_size = parse_memory_size(optarg);
+                if (memory_size == 0) {
                     return EXIT_FAILURE;
                 }
                 break;
@@ -1828,10 +1872,10 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if ((unsigned int)memory_size >= SIZE_MAX / 1024 / 1024) {
+    if (memory_size >= SIZE_MAX) {
         fprintf(
             stderr,
-            "ERROR: This system can allocate at most %zu MB memory\n",
+            "ERROR: This system supports at most %zu MB memory\n",
             SIZE_MAX / 1024 / 1024 - 1);
         return EXIT_FAILURE;
     }
@@ -1841,7 +1885,7 @@ int main(int argc, char **argv)
 
     SortContext ctx;
     ctx.record_size = record_size;
-    ctx.memory_size = size_t(memory_size) * 1024 * 1024;
+    ctx.memory_size = memory_size;
     ctx.branch_factor = branch_factor;
     ctx.flag_unique = flag_unique;
     ctx.flag_verbose = flag_verbose;

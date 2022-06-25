@@ -6,12 +6,23 @@ CXX = g++
 CXXFLAGS = -Wall -O2
   # -fsanitize=address -fsanitize=undefined
 
-.PHONY: all
-all: sortbin recgen
+SRCDIR = src
+BUILDDIR = build
 
-sortbin: sortbin.cpp
-recgen: recgen.cpp
+TOOLS = sortbin recgen
+BINFILES = $(patsubst %,$(BUILDDIR)/%,$(TOOLS))
+
+.PHONY: all
+all: $(BINFILES)
+
+$(BUILDDIR)/sortbin: $(SRCDIR)/sortbin.cpp
+$(BUILDDIR)/recgen: $(SRCDIR)/recgen.cpp
+
+$(BUILDDIR)/%: $(SRCDIR)/%.cpp
+	@mkdir -p $(BUILDDIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $< $(LDLIBS) -o $@
 
 .PHONY: clean
 clean:
-	$(RM) sortbin recgen
+	$(RM) $(BINFILES)
+

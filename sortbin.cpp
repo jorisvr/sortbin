@@ -1,7 +1,7 @@
 /*
  * Sort arrays of binary data records.
  *
- * Input and output files contain plain, raw arrays of fixed-length
+ * Input and output files contain flat, raw arrays of fixed-length
  * binary data records.
  *
  * Records are interpreted as fixed-length strings of 8-bit unsigned integers.
@@ -39,14 +39,6 @@
 #include <vector>
 
 
-// TODO : Reconsider the choice of having a single temporary file;
-//        It appears this causes unnecessary I/O while processing
-//        and unbalanced merge tree.
-// TOOD : Implement multi-threaded sorting
-// TODO : Implement background thread for file I/O
-// TODO : Try fadvise to drop used data from system cache
-
-
 /* Maximum amount of RAM to use (in MBytes). */
 #define DEFAULT_MEMORY_SIZE_MBYTE   1024
 
@@ -59,6 +51,9 @@
 /* Align buffer sizes and I/O on this number of records.
    For efficiency, I/O should be done in multiples of 4096 bytes. */
 #define TRANSFER_ALIGNMENT          4096
+
+/* Template for temporary file name. Must end in 6 'X' characters. */
+#define TEMPFILE_TEMPLATE           "sortbin_tmpXXXXXX"
 
 
 namespace {  // anonymous namespace
@@ -362,10 +357,22 @@ public:
     /** Create temporary file and pre-allocate space. */
     BinaryTempFile(const std::string& tempdir, uint64_t new_size)
     {
-        // O_TMPFILE creates a new file without a name.
-        // Effectively the file is created and immediately unlinked.
-        // As a result, the file will be automatically deleted when closed.
-        m_fd = open(tempdir.c_str(), O_RDWR | O_TMPFILE, 0600);
+        // Prepare file name template ending in 6 'X' characters.
+        std::string filename_template = tempdir;
+        if (!filename_template.empty() && filename_template.back() != '/') {
+            filename_template.push_back('/');
+        }
+        filename_template.append(TEMPFILE_TEMPLATE);
+
+        // Copy template to modifiable buffer.
+        std::vector<char> filename_buf(
+            filename_template.c_str(),
+            filename_template.c_str() + filename_template.size() + 1);
+
+        // Create temporary file with unique name.
+        // mkstemp() replaces the 'X' characters in the file name template
+        // to create a unique file name.
+        m_fd = mkstemp(filename_buf.data());
         if (m_fd < 0) {
             throw std::system_error(
                 errno,
@@ -375,13 +382,28 @@ public:
 
         int ret = posix_fallocate(m_fd, 0, new_size);
         if (ret != 0) {
+            int errnum = errno;
+
+            // Delete temporary file.
+            unlink(filename_buf.data());
+
             throw std::system_error(
-                errno,
+                errnum,
                 std::system_category(),
                 "Can not allocate space in temporary file");
         }
 
         m_file_size = new_size;
+
+        // Delete the temporary file.
+        // Since the file is still open, it will continue to exist on disk
+        // until the file handle is closed.
+        if (unlink(filename_buf.data()) != 0) {
+            throw std::system_error(
+                errno,
+                std::system_category(),
+                "Can not delete temporary file");
+        }
     }
 };
 
@@ -1413,7 +1435,7 @@ void merge_pass(
     timer.start();
 
     // Calculate number of buffers:
-    // 2 buffers per input stream + buffers for output 1 stream.
+    // 2 buffers per input stream + more buffers for output stream.
     size_t num_output_buffers = 2 + (branch_factor - 1) / 2;
     size_t num_buffers = 2 * branch_factor + num_output_buffers;
 

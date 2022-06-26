@@ -124,8 +124,6 @@ public:
             // uniformly from the set of keys, instead of from the set of
             // all possible records.
 
-// TODO : need a correction factor for the probability that unique secondary seeds collide in the record generation
-
             // Calculate target number of unique records.
             double target_unique = num_records * (1 - duplicate_fraction);
 
@@ -207,7 +205,6 @@ public:
 
             if (need_bits < 127) {
                 // Use this number of bits per record.
-                printf("use bits = %f\n", need_bits - 1 + need_bits_frac16 / 16.0);
                 m_bits_per_record = need_bits;
                 m_highbit_threshold =
                     exp((63 + need_bits_frac16 / 16.0) * M_LN2);
@@ -216,7 +213,6 @@ public:
                 // We need so many random bits that nobody will notice
                 // if we just use a uniform distribution of records.
                 // So let's do that.
-                printf("use uniform\n");
                 m_make_duplicates = false;
             }
         }

@@ -3,7 +3,7 @@
 #
 
 CXX = g++
-CXXFLAGS = -Wall -O2
+CXXFLAGS = -Wall -O2 -pthread
   # -fsanitize=address -fsanitize=undefined
 
 SRCDIR = src

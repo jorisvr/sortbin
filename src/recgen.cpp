@@ -109,48 +109,147 @@ public:
         double duplicate_fraction,
         bool flag_ascii)
       : m_record_size(record_size),
+        m_bits_per_record(0),
+        m_highbit_threshold(0),
+        m_make_duplicates(false),
         m_flag_ascii(flag_ascii)
     {
         assert(record_size > 0);
 
         if (duplicate_fraction > 0) {
-            // Calculate the number of bits needed to achieve the
-            // specified duplicate fraction.
+
+            // Target a specific fraction of duplicate records.
+            // We do this by defining a limited set of keys, such that each
+            // key maps to a random record. To generate a record, we draw
+            // uniformly from the set of keys, instead of from the set of
+            // all possible records.
+
+// TODO : need a correction factor for the probability that unique secondary seeds collide in the record generation
+
+            // Calculate target number of unique records.
+            double target_unique = num_records * (1 - duplicate_fraction);
+
+            // Calculate the amount of information per record (in bits).
+            double info_per_record =
+                m_flag_ascii ?
+                    ((record_size - 1) * log2(36.0))
+                    : (record_size * 8.0);
+
+            // Determine how many unique keys we need to draw to
+            // get an exepected number of unique records that matches
+            // our target.
             //
-            // This calculation is not exactly right, but it
-            // gives reasonable results for duplication_fraction > 0.5.
-            double num_values =
-                double(num_records) * (1 / duplicate_fraction - 1);
-            m_bits_per_record = lrint(ceil(log2(num_values)));
-        } else {
-            // Use uniform distribution of records.
-            m_bits_per_record = 8 * record_size;
+            // Draw N records from a set of V possible values.
+            // Expected number of unique values:
+            //
+            //   U = V * (1 - (1 - 1/V)**N)
+            //
+            // Solve for N:
+            //
+            //   N = log(1 - U/V) / log(1 - 1/V)
+            //
+            if (info_per_record >= 128) {
+                // The number of records is so big that we can just pretend
+                // that every key will produce a different record.
+            } else {
+                double v = exp(info_per_record * M_LN2);
+
+                if (target_unique * 1.000001 >= v) {
+                    // There are not enough different records to produce
+                    // the requested number of unique records.
+                    // Just produce as many as possible.
+                    target_unique = num_records;
+                } else {
+
+                    // log(1 - 1/V) is inaccurate for very large values of V;
+                    // approximate as (-1/V)
+                    double t =
+                        (v < 1.0e6) ?
+                            log(1.0 - 1.0 / v)
+                            : (-1.0 / v);
+
+                    // log(1 - U/V) is inaccurate for very large values of V;
+                    // approximate as (-U/V)
+                    double q =
+                        (v < 1.0e6 * target_unique) ?
+                            log(1.0 - target_unique / v)
+                            : (- target_unique / v);
+
+                    // Calculate the target number of unique keys.
+                    target_unique = q / t;
+                }
+            }
+
+            // Determine the number of random bits for which the
+            // expected number of unique keys matches our target.
+            // First scan in steps of 1 bit.
+            unsigned int need_bits = 2;
+            while (need_bits < 127) {
+                double expected_unique =
+                    expected_num_unique(num_records, need_bits);
+                if (expected_unique >= target_unique) {
+                    break;
+                }
+                need_bits++;
+            }
+
+            // Fine scan in steps of 1/16 bit.
+            unsigned int need_bits_frac16 = 0;
+            while (need_bits_frac16 < 16) {
+                double nbits = need_bits - 1 + need_bits_frac16 / 16.0;
+                double expected_unique =
+                    expected_num_unique(num_records, nbits);
+                if (expected_unique >= target_unique) {
+                    break;
+                }
+                need_bits_frac16++;
+            }
+
+            if (need_bits < 127) {
+                // Use this number of bits per record.
+                printf("use bits = %f\n", need_bits - 1 + need_bits_frac16 / 16.0);
+                m_bits_per_record = need_bits;
+                m_highbit_threshold =
+                    exp((63 + need_bits_frac16 / 16.0) * M_LN2);
+                m_make_duplicates = true;
+            } else {
+                // We need so many random bits that nobody will notice
+                // if we just use a uniform distribution of records.
+                // So let's do that.
+                printf("use uniform\n");
+                m_make_duplicates = false;
+            }
         }
     }
 
     void generate_record(unsigned char * record, Xoroshiro128plus& rng)
     {
-        if (m_bits_per_record >= 8 * m_record_size || m_bits_per_record >= 128) {
-            // Just generate uniformly selected records.
-            // Nobody will notice the difference.
-            generate_uniform_record(record, rng);
-        } else {
+        if (m_make_duplicates) {
             // We have a budget of fewer than 128 random bits per record.
-            // Create a random seed value of that many bits, then use it
-            // to initialize a secondary random number generator to generate
-            // the data.
+            // Create a random seed value of that many bits.
+            // Then use it to initialize a secondary random number generator.
+            // Then use that generator to generate the actual record.
+
             uint64_t s0 = 0, s1 = 0;
-            if (m_bits_per_record > 64) {
+            unsigned int need_bits = m_bits_per_record;
+            if (need_bits > 64) {
                 s0 = rng.next();
-                s1 = rng.next() >> (128 - m_bits_per_record);
-            } else {
-                s0 = rng.next() >> (64 - m_bits_per_record);
-                s1 = 0;
+                need_bits -= 64;
             }
+            do {
+                s1 = rng.next();
+            } while (s1 > m_highbit_threshold);
+            s1 >>= (64 - need_bits);
+
             Xoroshiro128plus rng2(s0, s1);
             rng2.next();
             rng2.next();
+            rng2.next();
+
             generate_uniform_record(record, rng2);
+        } else {
+            // Uniform distribution of records.
+            generate_uniform_record(record, rng);
         }
     }
 
@@ -161,7 +260,7 @@ private:
 
             // Generate ASCII record.
             for (unsigned int i = 0; i < m_record_size - 1; i++) {
-                uint64_t r = rng.next() >> 4;
+                uint64_t r = rng.next() >> 32;
                 unsigned int p = r % 36;
                 if (p < 10) {
                     record[i] = '0' + p;
@@ -177,15 +276,40 @@ private:
 
             // Generate binary record.
             for (unsigned int i = 0; i < m_record_size; i++) {
-                uint64_t r = rng.next() >> 4;
+                uint64_t r = rng.next() >> 32;
                 record[i] = r & 0xff;
             }
 
         }
     }
 
+    /** Calculate the expected number of unique records. */
+    double expected_num_unique(unsigned long long num_records,
+                               double bits_per_record)
+    {
+        // We draw N records from a set of V values with replacement.
+        //
+        // The expected number of unique values drawn in one batch is
+        //
+        //   V * (1 - (1 - 1/V)**N)
+        //
+
+        double v = exp(bits_per_record * M_LN2);
+
+        // The calculation (1 - 1/V)**N is inaccurate for very large
+        // values of V. In that case, approximation as exp(- N / V).
+        double t =
+            (v < 1.0e6) ?
+                pow(1.0 - 1.0 / v, num_records)
+                : exp(- double(num_records) / v);
+
+        return v * (1.0 - t);
+    }
+
     unsigned int m_record_size;
     unsigned int m_bits_per_record;
+    uint64_t m_highbit_threshold;
+    bool m_make_duplicates;
     bool m_flag_ascii;
 };
 
@@ -259,10 +383,10 @@ void usage()
         "\n"
         "Options:\n"
         "\n"
-        "  -a          generate ASCII records: 0-1, a-z, end in newline\n"
-        "  -d D        specify fraction of duplicate records (0.0 to 1.0)\n"
         "  -n N        specify number of records (required)\n"
         "  -s S        specify record size in bytes (required)\n"
+        "  -a          generate ASCII records: 0-1, a-z, end in newline\n"
+        "  -d D        specify fraction of duplicate records (0.0 to 1.0)\n"
         "  -S R        specify seed for random generator (default 1)\n"
         "\n");
 }

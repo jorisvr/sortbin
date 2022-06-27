@@ -111,8 +111,10 @@ public:
       : m_record_size(record_size),
         m_bits_per_record(0),
         m_highbit_threshold(0),
+        m_salt(0),
+        m_flag_ascii(flag_ascii),
         m_make_duplicates(false),
-        m_flag_ascii(flag_ascii)
+        m_salt_initialized(false)
     {
         assert(record_size > 0);
 
@@ -226,6 +228,14 @@ public:
             // Then use it to initialize a secondary random number generator.
             // Then use that generator to generate the actual record.
 
+            // During the first call, generate a salt for the secondary
+            // random number generator. Without this salt, every run
+            // would sample from the same subset of records.
+            if (!m_salt_initialized) {
+                m_salt = rng.next();
+                m_salt_initialized = true;
+            }
+
             uint64_t s0 = 0, s1 = 0;
             unsigned int need_bits = m_bits_per_record;
             if (need_bits > 64) {
@@ -236,12 +246,14 @@ public:
                 s1 = rng.next();
             } while (s1 > m_highbit_threshold);
             s1 >>= (64 - need_bits);
+            s0 ^= m_salt;
 
+            // Create secondary random number generator.
             Xoroshiro128plus rng2(s0, s1);
             rng2.next();
             rng2.next();
-            rng2.next();
 
+            // Use it to generate a record.
             generate_uniform_record(record, rng2);
         } else {
             // Uniform distribution of records.
@@ -305,8 +317,10 @@ private:
     unsigned int m_record_size;
     unsigned int m_bits_per_record;
     uint64_t m_highbit_threshold;
-    bool m_make_duplicates;
+    uint64_t m_salt;
     bool m_flag_ascii;
+    bool m_make_duplicates;
+    bool m_salt_initialized;
 };
 
 

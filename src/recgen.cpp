@@ -350,7 +350,7 @@ int recgen(
     }
 
     FILE *outf = fdopen(fd, "w");
-    if (outf == NULL) {
+    if (outf == nullptr) {
         fprintf(stderr, "ERROR: fdopen() failed (%s)\n", strerror(errno));
         close(fd);
         return -1;

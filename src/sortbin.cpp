@@ -619,8 +619,8 @@ public:
         m_next_block(0),
         m_block_remaining(0),
         m_file_offset(0),
-        m_bufpos(NULL),
-        m_bufend(NULL),
+        m_bufpos(nullptr),
+        m_bufend(nullptr),
         m_blocks(blocks),
         m_buffer_size(buffer_size),
         m_buffer_index(0),
@@ -631,7 +631,7 @@ public:
 
         // Allocate buffer(s).
         m_buffers[0].resize(buffer_size);
-        if (io_pool != NULL) {
+        if (io_pool != nullptr) {
             // Background I/O: allocate extra buffer.
             m_buffers[1].resize(buffer_size);
 
@@ -708,7 +708,7 @@ private:
             size_t transfer_size = std::min(uint64_t(m_buffer_size),
                                             m_block_remaining);
 
-            if (m_io_pool == NULL) {
+            if (m_io_pool == nullptr) {
                 // Use blocking I/O.
                 m_input_file.read(
                     m_buffers[0].data(),
@@ -733,7 +733,7 @@ private:
             m_bufend = m_bufpos + transfer_size;
 
             // Start reading next buffer in background thread.
-            if (m_io_pool != NULL) {
+            if (m_io_pool != nullptr) {
                 pre_read_buffer();
             }
         }
@@ -742,7 +742,7 @@ private:
     /** Start reading into the next buffer. */
     void pre_read_buffer()
     {
-        assert(m_io_pool != NULL);
+        assert(m_io_pool != nullptr);
 
         uint64_t pre_file_offset = m_file_offset;
         uint64_t pre_block_remaining = m_block_remaining;
@@ -835,7 +835,7 @@ public:
         assert(buffer_size > record_size);
         assert(num_buffers > 0);
 
-        if (io_pool == NULL) {
+        if (io_pool == nullptr) {
             // No background I/O: Use just 1 buffer.
             m_buffers.emplace_back(buffer_size);
         } else {
@@ -879,7 +879,7 @@ public:
         flush_block();
 
         // Wait until all background I/O complete.
-        if (m_io_pool != NULL) {
+        if (m_io_pool != nullptr) {
             for (ThreadPool::FutureType& fut : m_futures) {
                 if (fut.valid()) {
                     fut.get();
@@ -898,7 +898,7 @@ private:
         if (flush_size > 0) {
 
             // Write the current block to file.
-            if (m_io_pool == NULL) {
+            if (m_io_pool == nullptr) {
                 // Use blocking I/O.
                 m_output_file.write(buf_start, m_file_offset, flush_size);
             } else {
@@ -1520,7 +1520,7 @@ void sort_records(
     unsigned int num_threads,
     ThreadPool * thread_pool)
 {
-    if (num_threads > 1 && thread_pool != NULL) {
+    if (num_threads > 1 && thread_pool != nullptr) {
         quicksort_records_parallel(
             buffer,
             record_size,
@@ -1700,7 +1700,7 @@ void sort_pass(
     // Allocate sort buffer(s).
     std::array<std::vector<unsigned char>, 2> buffers;
     buffers[0].resize(records_per_block * record_size);
-    if (io_pool != NULL) {
+    if (io_pool != nullptr) {
         // Allocate a second buffer for background I/O.
         buffers[1].resize(records_per_block * record_size);
     }
@@ -1724,7 +1724,7 @@ void sort_pass(
     auto buffer_chooser =
         [io_pool, &buffers]
         (uint64_t block_index) -> unsigned char * {
-            if (io_pool != NULL) {
+            if (io_pool != nullptr) {
                 // Blocks alternate between the two buffers.
                 return buffers[block_index % 2].data();
             } else {
@@ -1788,12 +1788,12 @@ void sort_pass(
         // Read block via blocking I/O, if necessary.
         // Use this to read all blocks when we do not use background I/O.
         // Use this only for the first block when we have background I/O.
-        if (io_pool == NULL || block_index == 0) {
+        if (io_pool == nullptr || block_index == 0) {
             read_block(input_file, block_index, block_buffer);
         }
 
         // Handle background I/O, if necessary.
-        if (io_pool != NULL) {
+        if (io_pool != nullptr) {
             ThreadPool::FutureType new_future;
             if (block_index > 0 && block_index < num_blocks - 1) {
                 // Start background I/O to write the previous block, then
@@ -1853,14 +1853,14 @@ void sort_pass(
 
         // If we use background I/O and this is the last block, wait for
         // any previous background write to complete.
-        if (io_pool != NULL && block_index == num_blocks - 1) {
+        if (io_pool != nullptr && block_index == num_blocks - 1) {
             io_future.get();
         }
 
         // Write block via blocking I/O, if necessary.
         // Use this to write all blocks when we do not use background I/O.
         // Use this only for the last block when we have background I/O.
-        if (io_pool == NULL || block_index == num_blocks - 1) {
+        if (io_pool == nullptr || block_index == num_blocks - 1) {
             BinaryFile& output_file = output_file_chooser(block_index);
             write_block(output_file, block_index, block_buffer);
         }
@@ -2012,8 +2012,8 @@ void merge_pass(
     // Choose number of buffers.
     // Without background I/O: 1 input buffer per stream + 1 output buffer.
     // With background I/O:    2 input buffers per stream + 4 output buffers.
-    unsigned int num_input_buf = (read_thread_pool != NULL) ? 2 : 1;
-    unsigned int num_output_buf = (write_thread_pool != NULL) ? 4 : 1;
+    unsigned int num_input_buf = (read_thread_pool != nullptr) ? 2 : 1;
+    unsigned int num_output_buf = (write_thread_pool != nullptr) ? 4 : 1;
     unsigned int num_buffers =
         ctx.branch_factor * num_input_buf + num_output_buf;
 
@@ -2458,7 +2458,7 @@ void sortbin(
 std::string get_default_tmpdir(void)
 {
     const char *tmpdir = getenv("TMPDIR");
-    if (tmpdir == NULL) {
+    if (tmpdir == nullptr) {
         tmpdir = "/tmp";
     }
     return std::string(tmpdir);
@@ -2587,17 +2587,17 @@ void usage()
 int main(int argc, char **argv)
 {
     const struct option longopts[] = {
-        { "size", 1, NULL, 's' },
-        { "unique", 0, NULL, 'u' },
-        { "memory", 1, NULL, 'M' },
-        { "branch", 1, NULL, 'B' },
-        { "parallel", 1, NULL, 'P' },
-        { "temporary-directory", 1, NULL, 'T' },
-        { "iothread", 0, NULL, 'X' },
-        { "no-iothread", 0, NULL, 'x' },
-        { "verbose", 0, NULL, 'v' },
-        { "help", 0, NULL, 'h' },
-        { NULL, 0, NULL, 0 }
+        { "size", 1, nullptr, 's' },
+        { "unique", 0, nullptr, 'u' },
+        { "memory", 1, nullptr, 'M' },
+        { "branch", 1, nullptr, 'B' },
+        { "parallel", 1, nullptr, 'P' },
+        { "temporary-directory", 1, nullptr, 'T' },
+        { "iothread", 0, nullptr, 'X' },
+        { "no-iothread", 0, nullptr, 'x' },
+        { "verbose", 0, nullptr, 'v' },
+        { "help", 0, nullptr, 'h' },
+        { nullptr, 0, nullptr, 0 }
     };
 
     SortContext ctx;
@@ -2611,7 +2611,8 @@ int main(int argc, char **argv)
     ctx.temporary_directory = get_default_tmpdir();
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "s:T:uvh", longopts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "s:T:uvh", longopts, nullptr))
+           != -1) {
         switch (opt) {
             case 's':
                 if (!parse_uint(optarg, ctx.record_size)

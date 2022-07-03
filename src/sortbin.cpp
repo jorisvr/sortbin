@@ -391,6 +391,9 @@ protected:
         }
     }
 
+    /** Set file size and try to preallocate disk space. */
+    void preallocate(const std::string& filename, uint64_t new_size);
+
     /** File descriptor. */
     int         m_fd;
 
@@ -454,6 +457,60 @@ void BinaryFile::write(
     }
 }
 
+// Set file size and try to preallocate disk space.
+void BinaryFile::preallocate(
+    const std::string& filename,
+    uint64_t new_size)
+{
+    // Note: posix_fallocate() MUST NOT be used. On systems that do not
+    //   support fallocate(), posix_fallocate() would silently revert
+    //   to writing zeros which is extremely slow.
+    //
+    // Instead, we use the Linux-specific call fallocate().
+    //
+    int ret = EOPNOTSUPP;
+
+#ifdef __linux__
+    ret = fallocate(m_fd, 0, 0, new_size);
+    if (ret != 0) {
+        if (errno == EOPNOTSUPP) {
+            fprintf(stderr,
+                    "WARNING: fallocate() not supported for '%s'\n",
+                    filename.c_str());
+        } else {
+            int errnum = errno;
+
+            // Delete empty output file.
+            unlink(filename.c_str());
+
+            throw std::system_error(
+                errnum,
+                std::system_category(),
+                "Can not allocate space in '" + filename + "'");
+        }
+    }
+#endif  // defined(__linux__)
+
+    if (ret != 0) {
+        // If fallocate() is unavailable or failed, use ftruncate() to
+        // set the file size.
+        ret = ftruncate(m_fd, new_size);
+        if (ret != 0) {
+            int errnum = errno;
+
+            // Delete empty output file.
+            unlink(filename.c_str());
+
+            throw std::system_error(
+                errnum,
+                std::system_category(),
+                "Can not set size of '" + filename + "'");
+        }
+    }
+
+    m_file_size = new_size;
+}
+
 
 /** Binary input file. */
 class BinaryInputFile : public BinaryFile
@@ -498,20 +555,7 @@ public:
                 "Can not create output file");
         }
 
-        int ret = posix_fallocate(m_fd, 0, new_size);
-        if (ret != 0) {
-            int errnum = errno;
-
-            // Delete empty output file.
-            unlink(filename.c_str());
-
-            throw std::system_error(
-                errnum,
-                std::system_category(),
-                "Can not allocate space in output file");
-        }
-
-        m_file_size = new_size;
+        preallocate(filename, new_size);
     }
 };
 
@@ -546,20 +590,7 @@ public:
                 "Can not create temporary file");
         }
 
-        int ret = posix_fallocate(m_fd, 0, new_size);
-        if (ret != 0) {
-            int errnum = errno;
-
-            // Delete temporary file.
-            unlink(filename_buf.data());
-
-            throw std::system_error(
-                errnum,
-                std::system_category(),
-                "Can not allocate space in temporary file");
-        }
-
-        m_file_size = new_size;
+        preallocate(filename_buf.data(), new_size);
 
         // Delete the temporary file.
         // Since the file is still open, it will continue to exist on disk

@@ -1,4 +1,4 @@
 *.o
 *~
-sortbin
-recgen
+/build
+/tests/testdata

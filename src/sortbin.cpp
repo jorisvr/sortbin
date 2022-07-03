@@ -2581,6 +2581,12 @@ void usage()
 }
 
 
+void usage_short()
+{
+    fprintf(stderr, "Run 'sortbin --help' for usage instructions.\n");
+}
+
+
 } // anonymous namespace
 
 
@@ -2663,27 +2669,27 @@ int main(int argc, char **argv)
                 usage();
                 return EXIT_SUCCESS;
             default:
-                usage();
+                usage_short();
                 return EXIT_FAILURE;
         }
     }
 
     if (ctx.record_size < 1) {
         fprintf(stderr, "ERROR: Missing required parameter --size\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 
     if (argc < optind + 2) {
         fprintf(stderr,
                 "ERROR: Input and output file names must be specified\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 
     if (argc > optind + 2) {
         fprintf(stderr, "ERROR: Unexpected command-line parameters\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 

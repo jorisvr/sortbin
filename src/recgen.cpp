@@ -149,8 +149,8 @@ public:
             //   N = log(1 - U/V) / log(1 - 1/V)
             //
             if (info_per_record >= 128) {
-                // The number of records is so big that we can just pretend
-                // that every key will produce a different record.
+                // There are so many different records that we can just
+                // pretend that every key will produce a different record.
             } else {
                 double v = exp(info_per_record * M_LN2);
 
@@ -182,7 +182,7 @@ public:
 
             // Determine the number of random bits for which the
             // expected number of unique keys matches our target.
-            // First scan in steps of 1 bit.
+            // Coarse scan in steps of 1 bit.
             unsigned int need_bits = 2;
             while (need_bits < 127) {
                 double expected_unique =
@@ -223,19 +223,22 @@ public:
     void generate_record(unsigned char * record, Xoroshiro128plus& rng)
     {
         if (m_make_duplicates) {
-            // We have a budget of fewer than 128 random bits per record.
-            // Create a random seed value of that many bits.
-            // Then use it to initialize a secondary random number generator.
-            // Then use that generator to generate the actual record.
+            // We want a specific fraction of duplicate records.
+            // Instead of drawing a random record from a uniform distribution
+            // of all possible records, we draw a random key from a limited
+            // set, then map that key to a record.
 
-            // During the first call, generate a salt for the secondary
-            // random number generator. Without this salt, every run
-            // would sample from the same subset of records.
+            // During the first call, generate a salt for the mapping from
+            // key to record. Without this salt, repeated runs would sample
+            // from the same subset of records even when using different
+            // random seeds.
             if (!m_salt_initialized) {
                 m_salt = rng.next();
                 m_salt_initialized = true;
             }
 
+            // Draw a random key with the chosen number of bits.
+            // Apply a threshold to draw a "fractional" number of bits.
             uint64_t s0 = 0, s1 = 0;
             unsigned int need_bits = m_bits_per_record;
             if (need_bits > 64) {
@@ -246,16 +249,20 @@ public:
                 s1 = rng.next();
             } while (s1 > m_highbit_threshold);
             s1 >>= (64 - need_bits);
+
+            // Mix salt into the key.
             s0 ^= m_salt;
 
-            // Create secondary random number generator.
+            // Use the key to initialize a secondary random number generator.
             Xoroshiro128plus rng2(s0, s1);
             rng2.next();
             rng2.next();
 
-            // Use it to generate a record.
+            // Use secondary generator to map the key to a record.
             generate_uniform_record(record, rng2);
+
         } else {
+
             // Uniform distribution of records.
             generate_uniform_record(record, rng);
         }
@@ -402,11 +409,22 @@ void usage()
 }
 
 
+void usage_short()
+{
+    fprintf(stderr, "Run 'recgen --help' for usage instructions.\n");
+}
+
+
 } // anonymous namespace
 
 
 int main(int argc, char **argv)
 {
+    const struct option longopts[] = {
+        { "help", 0, nullptr, 'h' },
+        { nullptr, 0, nullptr, 0 }
+    };
+
     double duplicate_fraction = 0.0;
     unsigned long long num_records = 0;
     unsigned long record_size = 0;
@@ -414,7 +432,8 @@ int main(int argc, char **argv)
     unsigned long long seed = 1;
     int opt;
 
-    while ((opt = getopt(argc, argv, "ad:n:s:S:")) != -1) {
+    while ((opt = getopt_long(argc, argv, "ad:n:s:S:h", longopts, nullptr))
+           != -1) {
         char *endptr;
         switch (opt) {
             case 'a':
@@ -467,32 +486,32 @@ int main(int argc, char **argv)
                 usage();
                 return EXIT_SUCCESS;
             default:
-                usage();
+                usage_short();
                 return EXIT_FAILURE;
         }
     }
 
     if (num_records == 0) {
         fprintf(stderr, "ERROR: Missing required parameter -n\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
     if (record_size == 0) {
         fprintf(stderr, "ERROR: Missing required parameter -s\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 
     if (argc < optind + 1) {
         fprintf(stderr,
                 "ERROR: Output file name must be specified\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 
     if (argc > optind + 1) {
         fprintf(stderr, "ERROR: Unexpected command-line parameters\n");
-        usage();
+        usage_short();
         return EXIT_FAILURE;
     }
 

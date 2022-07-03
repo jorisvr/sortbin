@@ -21,7 +21,10 @@ test: $(BINFILES_DEBUG)
 	cd tests ; ./run_tests.sh
 
 $(BUILDDIR)/sortbin: $(SRCDIR)/sortbin.cpp
-$(BUILDDIR)/recgen: $(SRCDIR)/recgen.cpp
+$(BUILDDIR)/recgen: $(SRCDIR)/recgen.cpp $(SRCDIR)/xoroshiro128plus.h
+
+$(BUILDDIR)/sortbin_dbg: $(SRCDIR)/sortbin.cpp
+$(BUILDDIR)/recgen_dbg: $(SRCDIR)/recgen.cpp $(SRCDIR)/xoroshiro128plus.h
 
 $(BUILDDIR)/%: $(SRCDIR)/%.cpp
 	@mkdir -p $(BUILDDIR)
